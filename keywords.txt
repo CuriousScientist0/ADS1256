@@ -1,0 +1,32 @@
+# Syntax Colouring Map For ADS1256
+
+# Datatypes (KEYWORD1)
+ADS1256    KEYWORD1
+
+# Methods and Functions (KEYWORD2)
+InitializeADC	KEYWORD2
+
+readRegister	KEYWORD2
+writeRegister	KEYWORD2
+setDRATE	KEYWORD2
+setPGA	KEYWORD2
+setMUX	KEYWORD2
+setByteOrder	KEYWORD2
+setBuffer	KEYWORD2
+setAutoCal	KEYWORD2
+setGPIO	KEYWORD2
+writeGPIO	KEYWORD2
+readGPIO	KEYWORD2
+setCLKOUT	KEYWORD2
+setSDCS	KEYWORD2
+sendDirectCommand	KEYWORD2
+
+readSingle	KEYWORD2
+readSingleContinuous	KEYWORD2
+cycleDifferential	KEYWORD2
+convertToVoltage	KEYWORD2
+stopConversion	KEYWORD2
+
+# Instances (KEYWORD2)
+
+# Constants (LITERAL1)
