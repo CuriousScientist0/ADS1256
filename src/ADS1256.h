@@ -97,11 +97,6 @@ class ADS1256
 	
 public:
 
-const byte DRDY_pin;
-const byte RESET_pin;
-const byte SYNC_pin;
-const byte CS_pin;
-
 	//Constructor
 	ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin, const byte CS_pin, float VREF);
 	
