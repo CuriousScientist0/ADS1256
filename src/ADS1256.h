@@ -113,10 +113,14 @@ public:
 	//Individual methods
 	void setDRATE(uint8_t drate);
 	void setPGA(uint8_t pga);
+	uint8_t getPGA();
 	void setMUX(uint8_t mux);
 	void setByteOrder(uint8_t byteOrder);
+	void getByteOrder();
 	void setBuffer(uint8_t bufen);
+	void getBuffer();
 	void setAutoCal(uint8_t acal);
+	void getAutoCal();
 	void setGPIO(uint8_t dir0, uint8_t dir1, uint8_t dir2, uint8_t dir3);
 	void writeGPIO(uint8_t dir0value, uint8_t dir1value, uint8_t dir2value, uint8_t dir3value);
 	uint8_t readGPIO(uint8_t gpioPin);	

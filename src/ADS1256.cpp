@@ -41,7 +41,7 @@ void waitForDRDY() //A function that waits for the DRDY status to change via the
 
 //Constructor
 ADS1256::ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin, const byte CS_pin, float VREF)
-{	
+{
 	_DRDY_pin = DRDY_pin; 
 	pinMode(_DRDY_pin, INPUT);	
 	 
@@ -87,19 +87,29 @@ void ADS1256::InitializeADC()
 	
   SPI.begin();	    
 	
-  attachInterrupt(digitalPinToInterrupt(_DRDY_pin), DRDY_ISR, FALLING); //Make the interrupt fire on FALLING signal	
+  attachInterrupt(digitalPinToInterrupt(_DRDY_pin), DRDY_ISR, FALLING); //Make the interrupt fire on FALLING signal	 
   
   //Applying arbitrary default values to speed up the starting procedure if the user just want to get quick readouts
+  //We both pass values to the variables and then send those values to the corresponding registers
   delay(200);
-  writeRegister(STATUS_REG, B00110110); //BUFEN and ACAL enabled, Order is MSB, rest is read only
+
+  _STATUS = 0b00110110; //BUFEN and ACAL enabled, Order is MSB, rest is read only
+  writeRegister(STATUS_REG, _STATUS); 
   delay(200);
-  writeRegister(MUX_REG, B00000001); //MUX AIN0+AIN1
+  
+  _MUX = 0b00000001; //MUX AIN0+AIN1
+  writeRegister(MUX_REG, _MUX); 
   delay(200);
-  writeRegister(ADCON_REG, B00000000); //ADCON - CLK: OFF, SDCS: OFF, PGA = 0 (+/- 5 V)
+  
+  _ADCON = 0b00000000; //ADCON - CLK: OFF, SDCS: OFF, PGA = 0 (+/- 5 V)
+  writeRegister(ADCON_REG, _ADCON); 
   delay(200);
-  writeRegister(DRATE_REG, B10000010); //100SPS 
+  
+  _DRATE = 0b10000010; //100SPS
+  writeRegister(DRATE_REG, _DRATE);  
   delay(200);
-  sendDirectCommand(B11110000); //Offset and self-gain calibration
+  
+  sendDirectCommand(0b11110000); //Offset and self-gain calibration
   delay(200);
   
   _isAcquisitionRunning = false; //MCU will be waiting to start a continuous acquisition
@@ -108,7 +118,7 @@ void ADS1256::InitializeADC()
 void ADS1256::stopConversion() //Sending SDATAC to stop the continuous conversion
 {	
 	waitForDRDY(); //SDATAC should be called after DRDY goes LOW (p35. Figure 33)
-	SPI.transfer(B00001111); //Send SDATAC to the ADC	
+	SPI.transfer(0b00001111); //Send SDATAC to the ADC	
 	digitalWrite(_CS_pin, HIGH); //We finished the command sequence, so we switch it back to HIGH
 	SPI.endTransaction();
 	
@@ -132,14 +142,28 @@ void ADS1256::setMUX(uint8_t mux) //Setting MUX (input channel)
 void ADS1256::setPGA(uint8_t pga) //Setting PGA (input voltage range)
 {	
 	_PGA = pga;
-	_ADCON = _ADCON | 0b00000111; //Change bit 2-0 to 1, leave rest unchanged 
-	_ADCON = _ADCON & _PGA; //Combine the new _ADCON with the _PGA (changes bit 0-2)
+	_ADCON = readRegister(ADCON_REG); //Read the most recent value of the register
+	
+	_ADCON = (_ADCON & 0b11111000) | (_PGA & 0b00000111); // Clearing and then setting bits 2-0 based on pga
+	
 	writeRegister(ADCON_REG, _ADCON);	
 	delay(200);
 }
 
+uint8_t ADS1256::getPGA() //Reading PGA from the ADCON register
+{
+	uint8_t pgaValue = 0;
+	
+	pgaValue = readRegister(ADCON_REG) & 0b00000111; 
+	//Reading the ADCON_REG and keeping the first three bits.
+	
+	return(pgaValue);	
+}
+
 void ADS1256::setCLKOUT(uint8_t clkout) //Setting CLKOUT 
 {
+	_ADCON = readRegister(ADCON_REG); //Read the most recent value of the register
+	
 	//Values: 0, 1, 2, 3
 	
 	if(clkout == 0)
@@ -174,6 +198,8 @@ void ADS1256::setCLKOUT(uint8_t clkout) //Setting CLKOUT
 
 void ADS1256::setSDCS(uint8_t sdcs) //Setting SDCS
 {
+	_ADCON = readRegister(ADCON_REG); //Read the most recent value of the register
+	
 	//Values: 0, 1, 2, 3
 	
 	if(sdcs == 0)
@@ -208,6 +234,8 @@ void ADS1256::setSDCS(uint8_t sdcs) //Setting SDCS
 
 void ADS1256::setByteOrder(uint8_t byteOrder) //Setting byte order (MSB/LSB)
 {
+	_STATUS = readRegister(STATUS_REG); //Read the most recent value of the register
+	
 	if(byteOrder == 0)
 	{
 		//Byte order is MSB (default)
@@ -226,8 +254,26 @@ void ADS1256::setByteOrder(uint8_t byteOrder) //Setting byte order (MSB/LSB)
 	delay(100);
 }
 
+void ADS1256::getByteOrder() //Getting byte order (MSB/LSB)
+{	
+	uint8_t statusValue = readRegister(STATUS_REG);	//Read the whole STATUS register	
+	
+	if(bitRead(statusValue, 3) == 0) //Read bit 1 and print the corresponding message
+	{
+		//Byte order is MSB (default)
+		Serial.println("Byte order is MSB (default)");
+	}
+	else
+	{
+		//Byte order is LSB
+		Serial.println("Byte order is LSB");
+	}
+}
+
 void ADS1256::setAutoCal(uint8_t acal) //Setting ACAL (Automatic SYSCAL)
-{
+{	
+	_STATUS = readRegister(STATUS_REG); //Read the most recent value of the register
+	
 	if(acal == 0)
 	{
 		//Auto-calibration is disabled (default)
@@ -246,8 +292,26 @@ void ADS1256::setAutoCal(uint8_t acal) //Setting ACAL (Automatic SYSCAL)
 	delay(100);
 }
 
+void ADS1256::getAutoCal() //Getting ACAL (Automatic SYSCAL)
+{	
+	uint8_t statusValue = readRegister(STATUS_REG);	//Read the whole STATUS register	
+	
+	if(bitRead(statusValue, 2) == 0) //Read bit 1 and print the corresponding message
+	{
+		//Auto-calibration is disabled (default)
+		Serial.println("ACAL is disabled!");
+	}
+	else
+	{
+		//Auto-calibration is enabled
+		Serial.println("ACAL is enabled!");
+	}
+}
+
 void ADS1256::setBuffer(uint8_t bufen) //Setting input buffer (Input impedance)
-{
+{	
+	_STATUS = readRegister(STATUS_REG); //Read the most recent value of the register
+	
 	if(bufen == 0)
 	{
 		//Analog input buffer is disabled (default)
@@ -266,8 +330,26 @@ void ADS1256::setBuffer(uint8_t bufen) //Setting input buffer (Input impedance)
 	delay(100);
 }
 
+void ADS1256::getBuffer() //Getting input buffer (Input impedance)
+{	
+	uint8_t statusValue = readRegister(STATUS_REG);	//Read the whole STATUS register	
+	
+	if(bitRead(statusValue, 1) == 0) //Read bit 1 and print the corresponding message
+	{
+		//Analog input buffer is disabled (default)
+		Serial.println("Buffer is disabled!");
+	}
+	else
+	{
+		//Analog input buffer is enabled (recommended)
+		Serial.println("Buffer is enabled!");
+	}
+}
+
 void ADS1256::setGPIO(uint8_t dir0, uint8_t dir1, uint8_t dir2, uint8_t dir3) //Setting GPIO
-{
+{	
+	_GPIO = readRegister(IO_REG); //Read the most recent value of the register
+	
 	//Default: 11100000 - DEC: 224 - Ref: p32 I/O section
 	//Sets D3-D0 as input or output
 	uint8_t GPIO_bit7, GPIO_bit6, GPIO_bit5, GPIO_bit4;
@@ -323,6 +405,8 @@ void ADS1256::setGPIO(uint8_t dir0, uint8_t dir1, uint8_t dir2, uint8_t dir3) //
 
 void ADS1256::writeGPIO(uint8_t dir0value, uint8_t dir1value, uint8_t dir2value, uint8_t dir3value) //Writing GPIO
 {
+	_GPIO = readRegister(IO_REG);
+	
 	//Sets D3-D0 output values
 	//It is important that first one must use setGPIO, then writeGPIO
 	
@@ -379,7 +463,7 @@ void ADS1256::writeGPIO(uint8_t dir0value, uint8_t dir1value, uint8_t dir2value,
 
 uint8_t ADS1256::readGPIO(uint8_t gpioPin) //Reading GPIO
 {	
-	uint8_t GPIO_bit3, GPIO_bit2, GPIO_bit1, GPIO_bit0;
+	uint8_t GPIO_bit3, GPIO_bit2, GPIO_bit1, GPIO_bit0, GPIO_return;
 	
 	_GPIO = readRegister(IO_REG); //Read the GPIO register
 	
@@ -389,32 +473,29 @@ uint8_t ADS1256::readGPIO(uint8_t gpioPin) //Reading GPIO
 	GPIO_bit1 = bitRead(_GPIO, 1);
 	GPIO_bit0 = bitRead(_GPIO, 0);	
 	
-	delay(100);
+	delay(100);	
 	
-	//Return the selected bit value
-	//Bit3: DIR3 
-	if(gpioPin == 0)
+	switch(gpioPin) //Selecting which value should be returned
 	{
-		return(GPIO_bit0);
-	}	
-	//-----------------------------------------------------
-	//Bit2: DIR2 
-	if(gpioPin == 1)
-	{
-		return(GPIO_bit1);
-	}	
-	//-----------------------------------------------------
-	//Bit1: DIR1 
-	if(gpioPin == 2)
-	{
-		return(GPIO_bit2);
-	}	
-	//-----------------------------------------------------
-	//Bit0: DIR0 
-	if(gpioPin == 3)
-	{
-		return(GPIO_bit3);
-	}			
+		case 0:
+		GPIO_return = GPIO_bit0;
+		break;
+		
+		case 1:
+		GPIO_return = GPIO_bit1;
+		break;
+		
+		case 2:
+		GPIO_return = GPIO_bit2;
+		break;
+		
+		case 3:
+		GPIO_return = GPIO_bit3;
+		break;
+	}
+
+	return GPIO_return;
+	
 }
 
 void ADS1256::sendDirectCommand(uint8_t directCommand)
@@ -498,7 +579,7 @@ long ADS1256::readSingle() //Reading a single value ONCE using the RDATA command
 	SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
 	digitalWrite(_CS_pin, LOW); //REF: P34: "CS must stay low during the entire command sequence"  
 	waitForDRDY();
-	SPI.transfer(B00000001); //Issue RDATA (0000 0001) command
+	SPI.transfer(0b00000001); //Issue RDATA (0000 0001) command
 	delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
 
 	_outputBuffer[0] = SPI.transfer(0); // MSB
@@ -522,7 +603,7 @@ long ADS1256::readSingleContinuous() //Reads the recently selected input channel
 	  SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
 	  digitalWrite(_CS_pin, LOW); //REF: P34: "CS must stay low during the entire command sequence"	  
 	  while (digitalRead(_DRDY_pin)) {}
-	  SPI.transfer(B00000011);  //Issue RDATAC (0000 0011) 
+	  SPI.transfer(0b00000011);  //Issue RDATAC (0000 0011) 
 	  delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
 	  
 	}
@@ -615,13 +696,13 @@ long ADS1256::cycleSingle()
           break;
       }
       //Step 2.
-      SPI.transfer(B11111100); //SYNC
+      SPI.transfer(0b11111100); //SYNC
       delayMicroseconds(4); //t11 delay 24*tau = 3.125 us //delay should be larger, so we delay by 4 us
-      SPI.transfer(B11111111); //WAKEUP
+      SPI.transfer(0b11111111); //WAKEUP
 
       //Step 3.
       //Issue RDATA (0000 0001) command
-      SPI.transfer(B00000001);
+      SPI.transfer(0b00000001);
       delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
 
 	  _outputBuffer[0] = SPI.transfer(0x0F); // MSB 
