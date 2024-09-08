@@ -12,6 +12,8 @@
 #include "ADS1256.h"
 #include "SPI.h"
 
+#define convertSigned24BitToLong(value) ((value) & (1l << 23) ? (value) - 0x1000000 : value)
+
 //----
 volatile bool DRDY_value = false; //It is chosen to be false (HIGH) because that's the default state when a conversion is completed
 
@@ -514,13 +516,7 @@ void ADS1256::sendDirectCommand(uint8_t directCommand)
 
 
 float ADS1256::convertToVoltage(int32_t rawData) //Converting the 24-bit data into a voltage value
-{	
-  if (rawData >> 23 == 1) //if the 24th digit (sign) is 1, the number is negative
-  {
-    rawData = rawData - 16777216;  //conversion for the negative sign
-    //"mirroring" around zero
-  }  
-  
+{
   float voltage = ((2 * _VREF) / 8388608) * rawData / (pow(2, _PGA)); //8388608 = 2^{23} - 1
   //REF: p23, Table 16.
 	
@@ -588,6 +584,7 @@ long ADS1256::readSingle() //Reading a single value ONCE using the RDATA command
 
 	//Shifting and combining the above three items into a single, 24-bit number
 	_outputValue = ((long)_outputBuffer[0]<<16) | ((long)_outputBuffer[1]<<8) | (_outputBuffer[2]);
+	_outputValue = convertSigned24BitToLong(_outputValue);
 	
 	digitalWrite(_CS_pin, HIGH); //We finished the command sequence, so we set CS to HIGH
 	SPI.endTransaction();
@@ -617,6 +614,7 @@ long ADS1256::readSingleContinuous() //Reads the recently selected input channel
 	_outputBuffer[2] = SPI.transfer(0); // LSB
 	
 	_outputValue = ((long)_outputBuffer[0]<<16) | ((long)_outputBuffer[1]<<8) | (_outputBuffer[2]);
+	_outputValue = convertSigned24BitToLong(_outputValue);
 	
 	return _outputValue;
 }
@@ -710,6 +708,7 @@ long ADS1256::cycleSingle()
 	  _outputBuffer[2] = SPI.transfer(0x0F); // LSB
 		
 	  _outputValue = ((long)_outputBuffer[0]<<16) | ((long)_outputBuffer[1]<<8) | (_outputBuffer[2]);
+	  _outputValue = convertSigned24BitToLong(_outputValue);
 		
 	  _cycle++; //Increase cycle - This will move to the next MUX input channel
 	  if(_cycle == 8)
@@ -789,6 +788,7 @@ long ADS1256::cycleDifferential()
 	  _outputBuffer[2] = SPI.transfer(0); // LSB
 		
 	  _outputValue = ((long)_outputBuffer[0]<<16) | ((long)_outputBuffer[1]<<8) | (_outputBuffer[2]);
+	  _outputValue = convertSigned24BitToLong(_outputValue);
 		
 	  _cycle++;
 	  if(_cycle == 4)
