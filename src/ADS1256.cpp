@@ -14,33 +14,6 @@
 
 #define convertSigned24BitToLong(value) ((value) & (1l << 23) ? (value) - 0x1000000 : value)
 
-//----
-volatile bool DRDY_value = false; //It is chosen to be false (HIGH) because that's the default state when a conversion is completed
-
-#if defined(ESP32) //If the code is compiled for an ESP32 chip, we need a different definition for the ISR()
-#pragma message "Compilation for ESP32" //This line will print the message in the terminal for the compilation
-void IRAM_ATTR DRDY_ISR() 
-{		
-	DRDY_value = true; //Change the DRDY_value to true (LOW). (The ISR was fired by a FALLING signal)
-}
-#else
-#pragma message "Compilation for NON-ESP32"
-void DRDY_ISR() 
-{
-	DRDY_value = true; //Change the DRDY_value to true (LOW). (The ISR was fired by a FALLING signal)
-}
-#endif
-
-void waitForDRDY() //A function that waits for the DRDY status to change via the ISR()
-{		
-	while (DRDY_value == false) {}
-	noInterrupts();
-	DRDY_value = false; //Reset the DRDY_value manually to false while disabling the interrupts
-	interrupts();	
-}
-
-//----
-
 //Constructor
 ADS1256::ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin, const byte CS_pin, float VREF)
 {
@@ -89,8 +62,6 @@ void ADS1256::InitializeADC()
 	
   SPI.begin();	    
 	
-  attachInterrupt(digitalPinToInterrupt(_DRDY_pin), DRDY_ISR, FALLING); //Make the interrupt fire on FALLING signal	 
-  
   //Applying arbitrary default values to speed up the starting procedure if the user just want to get quick readouts
   //We both pass values to the variables and then send those values to the corresponding registers
   delay(200);
@@ -115,6 +86,11 @@ void ADS1256::InitializeADC()
   delay(200);
   
   _isAcquisitionRunning = false; //MCU will be waiting to start a continuous acquisition
+}
+
+void ADS1256::waitForDRDY()
+{		
+	while (digitalRead(_DRDY_pin) == HIGH) {}	
 }
 
 void ADS1256::stopConversion() //Sending SDATAC to stop the continuous conversion

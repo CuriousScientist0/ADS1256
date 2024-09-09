@@ -148,6 +148,9 @@ public:
 	
 private:
 
+// Block until DRDY is low
+void waitForDRDY();
+
 float _VREF; //Value of the reference voltage
 //Pins
 byte _DRDY_pin; //Pin assigned for DRDY
