@@ -5,7 +5,9 @@
  Author:	Curious Scientist
  Editor:	Notepad++
  Comment: Visit https://curiousscientist.tech/blog/ADS1256-custom-library
- Special thanks to Abraão Queiroz for spending time on the code and suggesting corrections for ESP32 microcontrollers!
+ Special thanks to 
+ Abraão Queiroz for spending time on the code and suggesting corrections for ESP32 microcontrollers
+ Benjamin Pelletier for pointing out and fixing an issue around the handling of the DRDY signal
 */
 
 #ifndef _ADS1256_h
@@ -148,8 +150,7 @@ public:
 	
 private:
 
-// Block until DRDY is low
-void waitForDRDY();
+void waitForDRDY(); // Block until DRDY is low
 
 float _VREF; //Value of the reference voltage
 //Pins

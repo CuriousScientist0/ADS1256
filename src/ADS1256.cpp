@@ -5,7 +5,9 @@
  Author:	Curious Scientist
  Editor:	Notepad++
  Comment: Visit https://curiousscientist.tech/blog/ADS1256-custom-library
- Special thanks to Abraão Queiroz for spending time on the code and suggesting corrections for ESP32 microcontrollers!
+ Special thanks to:
+ Abraão Queiroz for spending time on the code and suggesting corrections for ESP32 microcontrollers
+ Benjamin Pelletier for pointing out and fixing an issue around the handling of the DRDY signal
 */
 
 #include "Arduino.h"
@@ -575,10 +577,9 @@ long ADS1256::readSingleContinuous() //Reads the recently selected input channel
 	  _isAcquisitionRunning = true;
 	  SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
 	  digitalWrite(_CS_pin, LOW); //REF: P34: "CS must stay low during the entire command sequence"	  
-	  while (digitalRead(_DRDY_pin)) {}
+	  waitForDRDY();
 	  SPI.transfer(0b00000011);  //Issue RDATAC (0000 0011) 
-	  delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
-	  
+	  delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.	  
 	}
 	else
 	{
@@ -587,10 +588,10 @@ long ADS1256::readSingleContinuous() //Reads the recently selected input channel
 	
 	_outputBuffer[0] = SPI.transfer(0); // MSB 
 	_outputBuffer[1] = SPI.transfer(0); // Mid-byte
-	_outputBuffer[2] = SPI.transfer(0); // LSB
+	_outputBuffer[2] = SPI.transfer(0); // LSB	 
 	
 	_outputValue = ((long)_outputBuffer[0]<<16) | ((long)_outputBuffer[1]<<8) | (_outputBuffer[2]);
-	_outputValue = convertSigned24BitToLong(_outputValue);
+	_outputValue = convertSigned24BitToLong(_outputValue);	
 	
 	return _outputValue;
 }
