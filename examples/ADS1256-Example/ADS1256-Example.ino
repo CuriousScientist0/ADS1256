@@ -175,7 +175,7 @@ void loop()
 		  float channels[4]; //Buffer that holds 4 conversions (4 differential channels)
           for (int j = 0; j < 4; j++)
           {
-            channels[j] = A.convertToVoltage(A.cycleDifferential())); //store the converted differential results in the buffer
+            channels[j] = A.convertToVoltage(A.cycleDifferential()); //store the converted differential results in the buffer
           }
 		  
 		  //After the 4 conversions are in the buffer, the contents are printed on the serial terminal
