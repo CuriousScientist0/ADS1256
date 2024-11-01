@@ -235,6 +235,20 @@ void loop()
         Serial.println(voltageValue, 8); //Print the floating point number with 8 digits.
         break;
       //--------------------------------------------------------------------------------------------------------
+      case 'x': // Continuous single channel conversion
+
+      while (Serial.read() != 's') // The conversion is stopped by a character received from the serial port
+      {
+        rawConversion = A.readSingle();                   // Reading the raw value from a previously selected input, passing it to a variable
+        voltageValue = A.convertToVoltage(rawConversion); // Converting the above conversion into a floating point number
+
+        // Printing the results
+        Serial.println(voltageValue, 8); // Print the floating point number with 8 digits.
+      }
+
+      A.stopConversion();
+      break;
+      //--------------------------------------------------------------------------------------------------------
       case 'M': //set MUX
         {
           while (!Serial.available());
