@@ -38,8 +38,10 @@ ADS1256::ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin,
 	pinMode(_CS_pin, OUTPUT);
 	
 	_VREF = VREF;
+	_PGA = 1;
+	updateConvertConst();	
 }
-	
+
 
 //Initialization
 void ADS1256::InitializeADC()
@@ -128,6 +130,8 @@ void ADS1256::setPGA(uint8_t pga) //Setting PGA (input voltage range)
 	
 	writeRegister(ADCON_REG, _ADCON);	
 	delay(200);
+
+	updateConvertConst();
 }
 
 uint8_t ADS1256::getPGA() //Reading PGA from the ADCON register
@@ -495,10 +499,7 @@ void ADS1256::sendDirectCommand(uint8_t directCommand)
 
 float ADS1256::convertToVoltage(int32_t rawData) //Converting the 24-bit data into a voltage value
 {
-  float voltage = ((2 * _VREF) / 8388608) * rawData / (pow(2, _PGA)); //8388608 = 2^{23} - 1
-  //REF: p23, Table 16.
-	
-  return(voltage);
+  return _CONVERT_CONST * rawData;
 }
 
 void ADS1256::writeRegister(uint8_t registerAddress, uint8_t registerValueToWrite)
@@ -778,5 +779,8 @@ long ADS1256::cycleDifferential()
 	return _outputValue;
 }
 
-
+void ADS1256::updateConvertConst()
+{
+	_CONVERT_CONST = ((2 * _VREF) / 8388608) / (pow(2, _PGA)); //8388608 = 2^{23} - 1
+}
 

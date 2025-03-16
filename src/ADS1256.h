@@ -147,11 +147,14 @@ public:
 		
 	//Stop AD
 	void stopConversion();
-	
+
 private:
+
+void updateConvertConst();
 
 void waitForDRDY(); // Block until DRDY is low
 
+float _CONVERT_CONST;
 float _VREF; //Value of the reference voltage
 //Pins
 byte _DRDY_pin; //Pin assigned for DRDY
