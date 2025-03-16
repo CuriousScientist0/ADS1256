@@ -150,11 +150,11 @@ public:
 
 private:
 
-void updateConvertConst();
+void updateConvertConst(); // update voltage conversion constant
 
 void waitForDRDY(); // Block until DRDY is low
 
-float _CONVERT_CONST;
+float _CONVERT_CONST; // voltage conversion constant
 float _VREF; //Value of the reference voltage
 //Pins
 byte _DRDY_pin; //Pin assigned for DRDY
