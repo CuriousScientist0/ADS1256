@@ -8,6 +8,7 @@
  Special thanks to:
  Abraão Queiroz for spending time on the code and suggesting corrections for ESP32 microcontrollers
  Benjamin Pelletier for pointing out and fixing an issue around the handling of the DRDY signal
+ RadoMmm for suggesting an improvement on the ADC-to-Volts conversion
 */
 
 #include "Arduino.h"
@@ -38,6 +39,9 @@ ADS1256::ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin,
 	pinMode(_CS_pin, OUTPUT);
 	
 	_VREF = VREF;
+	_PGA = 0;
+	
+	updateConversionParameter();
 }
 	
 
@@ -80,24 +84,31 @@ void ADS1256::InitializeADC()
   writeRegister(ADCON_REG, _ADCON); 
   delay(200);
   
+  updateConversionParameter();
+  
   _DRATE = 0b10000010; //100SPS
   writeRegister(DRATE_REG, _DRATE);  
   delay(200);
   
   sendDirectCommand(0b11110000); //Offset and self-gain calibration
-  delay(200);
-  
+  delay(200);  
+
   _isAcquisitionRunning = false; //MCU will be waiting to start a continuous acquisition
 }
 
-void ADS1256::waitForDRDY()
+void ADS1256::waitForLowDRDY()
 {		
 	while (digitalRead(_DRDY_pin) == HIGH) {}	
 }
 
+void ADS1256::waitForHighDRDY()
+{		
+	while (digitalRead(_DRDY_pin) == LOW) {}	
+}
+
 void ADS1256::stopConversion() //Sending SDATAC to stop the continuous conversion
 {	
-	waitForDRDY(); //SDATAC should be called after DRDY goes LOW (p35. Figure 33)
+	waitForLowDRDY(); //SDATAC should be called after DRDY goes LOW (p35. Figure 33)
 	SPI.transfer(0b00001111); //Send SDATAC to the ADC	
 	digitalWrite(_CS_pin, HIGH); //We finished the command sequence, so we switch it back to HIGH
 	SPI.endTransaction();
@@ -128,13 +139,13 @@ void ADS1256::setPGA(uint8_t pga) //Setting PGA (input voltage range)
 	
 	writeRegister(ADCON_REG, _ADCON);	
 	delay(200);
+	
+	updateConversionParameter(); //Update the multiplier according top the new PGA value
 }
 
 uint8_t ADS1256::getPGA() //Reading PGA from the ADCON register
 {
-	uint8_t pgaValue = 0;
-	
-	pgaValue = readRegister(ADCON_REG) & 0b00000111; 
+	uint8_t pgaValue = readRegister(ADCON_REG) & 0b00000111; 
 	//Reading the ADCON_REG and keeping the first three bits.
 	
 	return(pgaValue);	
@@ -234,20 +245,11 @@ void ADS1256::setByteOrder(uint8_t byteOrder) //Setting byte order (MSB/LSB)
 	delay(100);
 }
 
-void ADS1256::getByteOrder() //Getting byte order (MSB/LSB)
+uint8_t ADS1256::getByteOrder() //Getting byte order (MSB/LSB)
 {	
 	uint8_t statusValue = readRegister(STATUS_REG);	//Read the whole STATUS register	
-	
-	if(bitRead(statusValue, 3) == 0) //Read bit 1 and print the corresponding message
-	{
-		//Byte order is MSB (default)
-		Serial.println("Byte order is MSB (default)");
-	}
-	else
-	{
-		//Byte order is LSB
-		Serial.println("Byte order is LSB");
-	}
+		
+	return bitRead(statusValue, 3);
 }
 
 void ADS1256::setAutoCal(uint8_t acal) //Setting ACAL (Automatic SYSCAL)
@@ -272,20 +274,11 @@ void ADS1256::setAutoCal(uint8_t acal) //Setting ACAL (Automatic SYSCAL)
 	delay(100);
 }
 
-void ADS1256::getAutoCal() //Getting ACAL (Automatic SYSCAL)
+uint8_t ADS1256::getAutoCal() //Getting ACAL (Automatic SYSCAL)
 {	
 	uint8_t statusValue = readRegister(STATUS_REG);	//Read the whole STATUS register	
 	
-	if(bitRead(statusValue, 2) == 0) //Read bit 1 and print the corresponding message
-	{
-		//Auto-calibration is disabled (default)
-		Serial.println("ACAL is disabled!");
-	}
-	else
-	{
-		//Auto-calibration is enabled
-		Serial.println("ACAL is enabled!");
-	}
+	return bitRead(statusValue, 2);
 }
 
 void ADS1256::setBuffer(uint8_t bufen) //Setting input buffer (Input impedance)
@@ -310,20 +303,11 @@ void ADS1256::setBuffer(uint8_t bufen) //Setting input buffer (Input impedance)
 	delay(100);
 }
 
-void ADS1256::getBuffer() //Getting input buffer (Input impedance)
+uint8_t ADS1256::getBuffer() //Getting input buffer (Input impedance)
 {	
 	uint8_t statusValue = readRegister(STATUS_REG);	//Read the whole STATUS register	
-	
-	if(bitRead(statusValue, 1) == 0) //Read bit 1 and print the corresponding message
-	{
-		//Analog input buffer is disabled (default)
-		Serial.println("Buffer is disabled!");
-	}
-	else
-	{
-		//Analog input buffer is enabled (recommended)
-		Serial.println("Buffer is enabled!");
-	}
+		
+	return bitRead(statusValue, 1);
 }
 
 void ADS1256::setGPIO(uint8_t dir0, uint8_t dir1, uint8_t dir2, uint8_t dir3) //Setting GPIO
@@ -494,16 +478,13 @@ void ADS1256::sendDirectCommand(uint8_t directCommand)
 
 
 float ADS1256::convertToVoltage(int32_t rawData) //Converting the 24-bit data into a voltage value
-{
-  float voltage = ((2 * _VREF) / 8388608) * rawData / (pow(2, _PGA)); //8388608 = 2^{23} - 1
-  //REF: p23, Table 16.
-	
-  return(voltage);
+{	
+  return(conversionParameter * rawData);
 }
 
 void ADS1256::writeRegister(uint8_t registerAddress, uint8_t registerValueToWrite)
 {	
-  waitForDRDY();
+  waitForLowDRDY();
 
   SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
   //SPI_MODE1 = output edge: rising, data capture: falling; clock polarity: 0, clock phase: 1.
@@ -526,7 +507,7 @@ void ADS1256::writeRegister(uint8_t registerAddress, uint8_t registerValueToWrit
 
 long ADS1256::readRegister(uint8_t registerAddress) //Reading a register
 {
-   waitForDRDY();
+   waitForLowDRDY();
 	
   SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
   //SPI_MODE1 = output edge: rising, data capture: falling; clock polarity: 0, clock phase: 1.
@@ -539,12 +520,12 @@ long ADS1256::readRegister(uint8_t registerAddress) //Reading a register
 
   delayMicroseconds(5); //see t6 in the datasheet
 
-  _registerValuetoRead = SPI.transfer(0xFF); //read out the register value
+  uint8_t regValue = SPI.transfer(0xFF); //read out the register value
 
   digitalWrite(_CS_pin, HIGH);
   SPI.endTransaction();
   delay(100);
-  return _registerValuetoRead;
+  return regValue;
 }
 
 
@@ -552,7 +533,7 @@ long ADS1256::readSingle() //Reading a single value ONCE using the RDATA command
 {
 	SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
 	digitalWrite(_CS_pin, LOW); //REF: P34: "CS must stay low during the entire command sequence"  
-	waitForDRDY();
+	waitForLowDRDY();
 	SPI.transfer(0b00000001); //Issue RDATA (0000 0001) command
 	delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
 
@@ -577,13 +558,13 @@ long ADS1256::readSingleContinuous() //Reads the recently selected input channel
 	  _isAcquisitionRunning = true;
 	  SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
 	  digitalWrite(_CS_pin, LOW); //REF: P34: "CS must stay low during the entire command sequence"	  
-	  waitForDRDY();
+	  waitForLowDRDY();
 	  SPI.transfer(0b00000011);  //Issue RDATAC (0000 0011) 
 	  delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.	  
 	}
 	else
 	{
-		waitForDRDY();
+		waitForLowDRDY();
 	}	
 	
 	_outputBuffer[0] = SPI.transfer(0); // MSB 
@@ -591,8 +572,10 @@ long ADS1256::readSingleContinuous() //Reads the recently selected input channel
 	_outputBuffer[2] = SPI.transfer(0); // LSB	 
 	
 	_outputValue = ((long)_outputBuffer[0]<<16) | ((long)_outputBuffer[1]<<8) | (_outputBuffer[2]);
-	_outputValue = convertSigned24BitToLong(_outputValue);	
+	_outputValue = convertSigned24BitToLong(_outputValue);		
 	
+	if(digitalRead(_DRDY_pin) == LOW) {waitForHighDRDY();} //Wait for DRDY to return HIGH
+		
 	return _outputValue;
 }
 
@@ -617,57 +600,41 @@ long ADS1256::cycleSingle()
 	if(_cycle < 8)
 	{      
 	  _outputValue = 0;
-	  waitForDRDY();
+	  waitForLowDRDY();
       //Step 1. - Updating MUX
       switch (_cycle)
       {
         //Channels are written manually
         case 0: //Channel 2
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
-          SPI.transfer(0x00);
-          SPI.transfer(SING_1);  //AIN1+AINCOM
+		updateMUX(SING_1);  //AIN1+AINCOM
           break;
 
         case 1: //Channel 3
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
-          SPI.transfer(0x00);
-          SPI.transfer(SING_2);  //AIN2+AINCOM
+          updateMUX(SING_2);  //AIN2+AINCOM
           break;
 
         case 2: //Channel 4
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
-          SPI.transfer(0x00);
-          SPI.transfer(SING_3);  //AIN3+AINCOM
+          updateMUX(SING_3);  //AIN3+AINCOM
           break;
 
         case 3: //Channel 5
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
-          SPI.transfer(0x00);
-          SPI.transfer(SING_4);  //AIN4+AINCOM
+          updateMUX(SING_4);  //AIN4+AINCOM
           break;
 
         case 4: //Channel 6
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
-          SPI.transfer(0x00);
-          SPI.transfer(SING_5);  //AIN5+AINCOM
+          updateMUX(SING_5);  //AIN5+AINCOM
           break;
 
         case 5: //Channel 7
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
-          SPI.transfer(0x00);
-          SPI.transfer(SING_6);  //AIN6+AINCOM
+          updateMUX(SING_6);  //AIN6+AINCOM
           break;
 
         case 6: //Channel 8
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
-          SPI.transfer(0x00);
-          SPI.transfer(SING_7);  //AIN7+AINCOM
+          updateMUX(SING_7);  //AIN7+AINCOM
           break;
 
         case 7: //Channel 1
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
-          SPI.transfer(0x00);
-          SPI.transfer(SING_0); //AIN0+AINCOM
+          updateMUX(SING_0); //AIN0+AINCOM
           break;
       }
       //Step 2.
@@ -721,33 +688,25 @@ long ADS1256::cycleDifferential()
     {
 	  _outputValue = 0;
       //DRDY has to go low
-	  waitForDRDY();
+	  waitForLowDRDY();
 
       //Step 1. - Updating MUX
       switch (_cycle)
       {
         case 0: //Channel 2
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
-          SPI.transfer(0x00);
-          SPI.transfer(DIFF_2_3);  //AIN2+AIN3
+		  updateMUX(DIFF_2_3);  //AIN2+AIN3
           break;
 
         case 1: //Channel 3
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
-          SPI.transfer(0x00);
-          SPI.transfer(DIFF_4_5); //AIN4+AIN5
+          updateMUX(DIFF_4_5); //AIN4+AIN5
           break;
 
         case 2: //Channel 4
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
-          SPI.transfer(0x00);
-          SPI.transfer(DIFF_6_7); //AIN6+AIN7
+          updateMUX(DIFF_6_7); //AIN6+AIN7
           break;
 
         case 3: //Channel 1
-          SPI.transfer(0x50 | 1); // 0x50 = WREG //1 = MUX
-          SPI.transfer(0x00);
-          SPI.transfer(DIFF_0_1); //AIN0+AIN1
+         updateMUX(DIFF_0_1); //AIN0+AIN1
           break;
       }
 
@@ -778,5 +737,17 @@ long ADS1256::cycleDifferential()
 	return _outputValue;
 }
 
+void ADS1256::updateConversionParameter()
+{
+	conversionParameter = ((2.0 * _VREF) / 8388608.0) / (pow(2, _PGA)); //Calculate the "bit to Volts" multiplier	
+	//8388608 = 2^{23} - 1, REF: p23, Table 16.
+}
+
+void ADS1256::updateMUX(uint8_t muxValue)
+{
+    SPI.transfer(0x50 | MUX_REG); //Write to the MUX register (0x50 is the WREG command)
+    SPI.transfer(0x00);           
+    SPI.transfer(muxValue);       //Write the new MUX value
+}
 
 
