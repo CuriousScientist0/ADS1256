@@ -43,7 +43,7 @@ ADS1256::ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin,
 	
 	updateConversionParameter();
 }
-	
+
 
 //Initialization
 void ADS1256::InitializeADC()
@@ -534,17 +534,9 @@ long ADS1256::readSingle() //Reading a single value ONCE using the RDATA command
 	SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
 	digitalWrite(_CS_pin, LOW); //REF: P34: "CS must stay low during the entire command sequence"  
 	waitForLowDRDY();
-	SPI.transfer(0b00000001); //Issue RDATA (0000 0001) command
-	delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
 
-	_outputBuffer[0] = SPI.transfer(0); // MSB
-	_outputBuffer[1] = SPI.transfer(0); // Mid-byte
-	_outputBuffer[2] = SPI.transfer(0); // LSB		
-
-	//Shifting and combining the above three items into a single, 24-bit number
-	_outputValue = ((long)_outputBuffer[0]<<16) | ((long)_outputBuffer[1]<<8) | (_outputBuffer[2]);
-	_outputValue = convertSigned24BitToLong(_outputValue);
-	
+	_outputValue = rdata();
+		
 	digitalWrite(_CS_pin, HIGH); //We finished the command sequence, so we set CS to HIGH
 	SPI.endTransaction();
   
@@ -641,19 +633,11 @@ long ADS1256::cycleSingle()
       SPI.transfer(0b11111100); //SYNC
       delayMicroseconds(4); //t11 delay 24*tau = 3.125 us //delay should be larger, so we delay by 4 us
       SPI.transfer(0b11111111); //WAKEUP
-
+	  
       //Step 3.
-      //Issue RDATA (0000 0001) command
-      SPI.transfer(0b00000001);
-      delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
+	  _outputValue = rdata();
 
-	  _outputBuffer[0] = SPI.transfer(0x0F); // MSB 
-	  _outputBuffer[1] = SPI.transfer(0x0F); // Mid-byte
-	  _outputBuffer[2] = SPI.transfer(0x0F); // LSB
-		
-	  _outputValue = ((long)_outputBuffer[0]<<16) | ((long)_outputBuffer[1]<<8) | (_outputBuffer[2]);
-	  _outputValue = convertSigned24BitToLong(_outputValue);
-		
+     	
 	  _cycle++; //Increase cycle - This will move to the next MUX input channel
 	  if(_cycle == 8)
 	  {
@@ -715,17 +699,8 @@ long ADS1256::cycleDifferential()
       SPI.transfer(0b11111111); //WAKEUP
 
       //Step 3.
-      SPI.transfer(0b00000001); //Issue RDATA (0000 0001) command
-      delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
+	  _outputValue = rdata();
 
-	
-	  _outputBuffer[0] = SPI.transfer(0); // MSB 
-	  _outputBuffer[1] = SPI.transfer(0); // Mid-byte
-	  _outputBuffer[2] = SPI.transfer(0); // LSB
-		
-	  _outputValue = ((long)_outputBuffer[0]<<16) | ((long)_outputBuffer[1]<<8) | (_outputBuffer[2]);
-	  _outputValue = convertSigned24BitToLong(_outputValue);
-		
 	  _cycle++;
 	  if(_cycle == 4)
 	  {
@@ -751,3 +726,55 @@ void ADS1256::updateMUX(uint8_t muxValue)
 }
 
 
+
+long ADS1256::cycle(byte nextSource)
+{
+	if (_isAcquisitionRunning == false)
+	{
+		SPI.beginTransaction(SPISettings(1920000, MSBFIRST, SPI_MODE1));
+		_isAcquisitionRunning = true;
+		digitalWrite(_CS_pin, LOW);
+	}
+
+	waitForLowDRDY();
+
+	updateMUX(nextSource);
+
+	//Step 2.
+	SPI.transfer(0b11111100); //SYNC
+	delayMicroseconds(4); //t11 delay 24*tau = 3.125 us //delay should be larger, so we delay by 4 us
+	SPI.transfer(0b11111111); //WAKEUP
+
+	return rdata();
+}
+
+// read last converted value
+long ADS1256::finishCycle()
+{
+	if (_isAcquisitionRunning == true)
+	{
+		waitForLowDRDY();
+		_outputValue = rdata();
+
+		digitalWrite(_CS_pin, HIGH);
+		SPI.endTransaction();
+		_isAcquisitionRunning = false;
+	}
+	return _outputValue;
+}
+
+long ADS1256::rdata()
+{
+	//Issue RDATA (0000 0001) command
+	SPI.transfer(0b00000001);
+	delayMicroseconds(7); //Wait t6 time (~6.51 us) REF: P34, FIG:30.
+
+	_outputBuffer[0] = SPI.transfer(0x0F); // MSB 
+	_outputBuffer[1] = SPI.transfer(0x0F); // Mid-byte
+	_outputBuffer[2] = SPI.transfer(0x0F); // LSB
+
+	_outputValue = ((long)_outputBuffer[0] << 16) | ((long)_outputBuffer[1] << 8) | (_outputBuffer[2]);
+	_outputValue = convertSigned24BitToLong(_outputValue);
+
+	return _outputValue;
+}
