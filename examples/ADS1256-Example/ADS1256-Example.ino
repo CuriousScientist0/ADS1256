@@ -167,7 +167,7 @@ void loop()
           }
           Serial.println();//Printing a linebreak - this will put the next 8 conversions in a new line
         }
-        A.stopConversion();
+        A.finishCycle(); // read and ignore last conversion
         break;
       //--------------------------------------------------------------------------------------------------------
       case 'D': //Cycle differential inputs (A0+A1, A2+A3, A4+A5, A6+A7)
@@ -191,7 +191,33 @@ void loop()
           }
           Serial.println();//Printing a linebreak - this will put the next 4 conversions in a new line
         }
-        A.stopConversion();
+        A.finishCycle(); // read and ignore last conversion
+        break;
+      //--------------------------------------------------------------------------------------------------------
+      case 'V': //Cycle various inputs (A0+GND, A1+GND, A2+A3, A4+A5)
+        A.setMUX(SING_0);
+        while (Serial.read() != 's') //The conversion is stopped by a character received from the serial port
+        {
+          float channels[4]; //Buffer that holds 4 conversions
+          
+          channels[0] = A.convertToVoltage(A.cycle(SING_1)); //store the previous conversion result (SING_0) in the buffer and start converting SING_1
+          channels[1] = A.convertToVoltage(A.cycle(DIFF_2_3)); //store the previous conversion result (SING_1) in the buffer and start converting DIFF_2_3
+          channels[2] = A.convertToVoltage(A.cycle(DIFF_4_5)); //store the previous conversion result (DIFF_2_3) in the buffer and start converting DIFF_4_5
+          channels[3] = A.convertToVoltage(A.cycle(SING_0)); //store the previous conversion result (DIFF_4_5) in the buffer and start converting SING_0
+
+          //After the 4 conversions are in the buffer, the contents are printed on the serial terminal
+          for (int i = 0; i < 4; i++)
+          {
+            Serial.print(channels[i], 4);//print the converted differential results from the buffer
+
+            if (i < 3) //Only printing tab between the first 3 conversions
+            {
+              Serial.print("\t"); //tab separator to separate the 4 conversions shown in the same line
+            }
+          }
+          Serial.println();//Printing a linebreak - this will put the next 4 conversions in a new line
+        }
+        A.finishCycle(); // read and ignore last conversion
         break;
       //--------------------------------------------------------------------------------------------------------
       case 'B': //Speed test

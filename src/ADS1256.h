@@ -142,17 +142,24 @@ public:
 	//Cycling through the differential inputs
 	long cycleDifferential(); //Ax + Ay
 		
+	//Cycles through the inputs based on the nextSource value
+	long cycle(byte nextSource); 
+
+	// read the last conversion
+	long finishCycle();
+
 	//Converts the reading into a voltage value
 	float convertToVoltage(int32_t rawData);
 		
 	//Stop AD
 	void stopConversion();
-	
+
 private:
 
 void waitForLowDRDY(); // Block until DRDY is low
 void waitForHighDRDY(); // Block until DRDY is high
 void updateMUX(uint8_t muxValue);
+long rdata(); //Read the converted data
 
 void updateConversionParameter(); //Refresh the conversion parameter based on the PGA
 
