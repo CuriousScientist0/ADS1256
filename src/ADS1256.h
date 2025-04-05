@@ -156,6 +156,9 @@ void updateMUX(uint8_t muxValue);
 
 void updateConversionParameter(); //Refresh the conversion parameter based on the PGA
 
+void resetByClk(); // send SCLK reset pattern
+
+
 float _VREF = 0; //Value of the reference voltage
 float conversionParameter = 0; //PGA-dependent multiplier
 //Pins

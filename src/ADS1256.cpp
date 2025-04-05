@@ -48,24 +48,32 @@ ADS1256::ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin,
 //Initialization
 void ADS1256::InitializeADC()
 {
-  //Chip select LOW  
-  digitalWrite(_CS_pin, LOW);
-  
-  //We do a manual chip reset on the ADS1256 - Datasheet Page 27/ RESET
-  if(_RESET_pin != 0)
-  {
-  digitalWrite(_RESET_pin, LOW);
-  delay(200);
-  digitalWrite(_RESET_pin, HIGH); //RESET is set to high
-  delay(1000);
-  }
-  
-  //Sync pin is also treated if it is defined
-  if(_SYNC_pin != 0)
-  {
-  digitalWrite(_SYNC_pin, HIGH); //RESET is set to high  
-  }
-	
+	//Sync pin is also treated if it is defined. Needs to be done before resetByClk()
+	if (_SYNC_pin != 0)
+	{
+		digitalWrite(_SYNC_pin, HIGH); //SYNC is set to high  
+	}
+
+	//Chip select LOW  
+	digitalWrite(_CS_pin, LOW);
+
+	//We do a manual chip reset on the ADS1256 - Datasheet Page 27/ RESET
+	if (_RESET_pin != 0)
+	{
+		digitalWrite(_RESET_pin, LOW);
+		delay(200);
+		digitalWrite(_RESET_pin, HIGH); //RESET is set to high
+		delay(1000);
+	}
+	else
+	{ // for case RST signal is not available/defined
+		// needs to be done before SPI.begin() to be able to write to SCK pin
+		pinMode(SCK, OUTPUT);
+		resetByClk();
+		resetByClk(); // repeat for case of SCLK pattern corruption by interrupt
+		delay(100);
+	}
+
   SPI.begin();	    
 	
   //Applying arbitrary default values to speed up the starting procedure if the user just want to get quick readouts
@@ -751,3 +759,30 @@ void ADS1256::updateMUX(uint8_t muxValue)
 }
 
 
+void ADS1256::resetByClk()
+{
+	// REF: p7, Figure 2 - SCLK reset pattern
+	//  Tclkin = 130 ns for fCLKIN = 7.68MHz
+
+	digitalWrite(_CS_pin, LOW);
+	digitalWrite(SCK, LOW);
+	delay(1);
+
+	digitalWrite(SCK, HIGH);
+	delayMicroseconds(52); //400 * Tclkin
+
+	digitalWrite(SCK, LOW);
+	delayMicroseconds(1); //5 * Tclkin; 1us is actually longer but seems to be tolerated
+
+	digitalWrite(SCK, HIGH);
+	delayMicroseconds(85); //650 * Tclkin
+
+	digitalWrite(SCK, LOW);
+	delayMicroseconds(1); //5 * Tclkin
+
+	digitalWrite(SCK, HIGH);
+	delayMicroseconds(150); //1150 * Tclkin
+
+	digitalWrite(SCK, LOW);
+	delay(10);
+}
