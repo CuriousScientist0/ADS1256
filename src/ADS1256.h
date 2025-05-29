@@ -13,6 +13,8 @@
 #ifndef _ADS1256_h
 #define _ADS1256_h
 
+#include <SPI.h>
+
 //Differential inputs
 #define DIFF_0_1 0b00000001 //A0 + A1 as differential input
 #define DIFF_2_3 0b00100011 //A2 + A3 as differential input
@@ -98,9 +100,8 @@ class ADS1256
 {
 	
 public:
-
 	//Constructor
-	ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin, const byte CS_pin, float VREF);
+	ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin, const byte CS_pin, float VREF, SPIClass* spi = &SPI);
 	
 	//Initializing function
 	void InitializeADC();	
@@ -149,6 +150,8 @@ public:
 	void stopConversion();
 	
 private:
+	
+SPIClass* _spi; //Pointer to an SPIClass object
 
 void waitForLowDRDY(); // Block until DRDY is low
 void waitForHighDRDY(); // Block until DRDY is high
@@ -179,8 +182,4 @@ long _outputValue; //Combined value of the _outputBuffer[3]
 bool _isAcquisitionRunning; //bool that keeps track of the acquisition (running or not)
 uint8_t _cycle; //Tracks the cycles as the MUX is cycling through the input channels
 };
-
-
-
-
 #endif
