@@ -96,12 +96,14 @@
 #define RESET 0b11111110
 //----------------------------------------------------------------
 
+
 class ADS1256
-{
-	
+{	
 public:
+static constexpr int8_t PIN_UNUSED = -1;
+
 	//Constructor
-	ADS1256(const byte DRDY_pin, const byte RESET_pin, const byte SYNC_pin, const byte CS_pin, float VREF, SPIClass* spi = &SPI);
+	ADS1256(const int8_t DRDY_pin, const int8_t RESET_pin, const int8_t SYNC_pin, const int8_t CS_pin, float VREF, SPIClass* spi = &SPI);
 	
 	//Initializing function
 	void InitializeADC();	
@@ -156,16 +158,18 @@ SPIClass* _spi; //Pointer to an SPIClass object
 void waitForLowDRDY(); // Block until DRDY is low
 void waitForHighDRDY(); // Block until DRDY is high
 void updateMUX(uint8_t muxValue);
+inline void CS_LOW();
+inline void CS_HIGH();
 
 void updateConversionParameter(); //Refresh the conversion parameter based on the PGA
 
 float _VREF = 0; //Value of the reference voltage
 float conversionParameter = 0; //PGA-dependent multiplier
 //Pins
-byte _DRDY_pin; //Pin assigned for DRDY
-byte _RESET_pin; //Pin assigned for RESET
-byte _SYNC_pin; //Pin assigned for SYNC
-byte _CS_pin; //Pin assigned for CS
+int8_t _DRDY_pin; //Pin assigned for DRDY
+int8_t _RESET_pin; //Pin assigned for RESET
+int8_t _SYNC_pin; //Pin assigned for SYNC
+int8_t _CS_pin; //Pin assigned for CS
 
 //Register values
 byte _DRATE; //Value of the DRATE register
